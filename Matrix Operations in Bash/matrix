@@ -1,0 +1,363 @@
+#!/bin/bash
+
+#######################
+#AUTHOR: Amy Stockinger
+#DATE: 04/01/19
+#DESCRIPTION: performs basic matrix functions, including dims, transpose, mean,
+#add, and multiply. Only functions that take one argument will accept direct
+#user input (dims, transpose, mean), the rest must be located in files already. 
+#useful link: https://devhints.io/bash
+#######################
+
+TMP="someFileName$$"
+TMP1="someFileName2$$"
+USRINPUT="someFileName3$$"
+
+trap "rm -f $TMP $USRINPUT; echo 'CTRL-C received, exiting...'; exit 1" INT HUP TERM
+
+#############
+#FUNCTION: main
+#PRECONDITION: call "matrix" along with command and arguments
+#POSTCONDITION: executes desired function, if valid input provided
+#DESCRIPTION: checks that an existing command is given as first argument,
+#then that the correct number of arguments for that function are also given
+#also checks that inputted files are readable. the functions themselves
+#check for empty files and proper dimensions, if required.
+#############
+main(){
+    #functions with 1 arg
+    if [ $1 == "dims" ] || [ $1 == "transpose" ] || [ $1 == "mean" ]
+    then
+        #file input option checks arg number and readability
+        if [[ $# -eq 2 && -r "$2" ]]
+        then
+            if [ $1 == "dims" ]
+            then
+                dims $2
+            elif [ $1 == "transpose" ]
+            then
+                transpose $2
+            elif [ $1 == "mean" ]
+            then
+                mean $2
+            else
+                echo "Something went wrong." >&2
+                exit 1
+            fi
+        elif [ $# -eq 1 ]
+        then
+            while read myLine
+            do
+                echo "$myLine" >> $USRINPUT
+            done
+            if [ $1 == "dims" ]
+            then
+                dims $USRINPUT
+                rm $USRINPUT
+            elif [ $1 == "transpose" ]
+            then
+                transpose $USRINPUT
+                rm $USRINPUT
+            elif [ $1 == "mean" ]
+            then
+                mean $USRINPUT
+                rm $USRINPUT
+            else
+                echo "Something went wrong. Exiting..." >&2
+                exit 1
+            fi
+        else
+            echo "Only use one argument for this function. Exiting..." >&2
+            exit 1
+        fi
+    #functions with 2 args
+    elif [ $1 == "add" ] || [ $1 == "multiply" ]
+    then
+        if [[ $# -eq 3 && -r "$2" && -r "$3" ]]
+        then
+            if [ $1 == "add" ]
+            then
+                add $2 $3
+            elif [ $1 == "multiply" ]
+            then
+                multiply $2 $3
+            else
+                echo "Something went wrong. Exiting..." >&2
+                exit 1
+            fi
+        else
+            echo "This function takes two arguments. Exiting..." >&2
+            exit 1
+        fi
+    else
+        echo "Invalid command. Exiting..." >&2
+        exit 1
+    fi
+}
+
+#############
+#FUNCTION: num_rows
+#PRECONDITION: one input file
+#POSTCONDITION: input file is unchanged, function returns number of rows in file
+#DESCRIPTION: uses wc (word count) -l (number of lines) to compute number of lines in
+#the given file. there should be a newline character after the last line of content.
+#############
+num_rows(){
+    num_row=$(wc -l <$1)
+    return $num_row
+}
+
+#############
+#FUNCTION: num_cols
+#PRECONDITION: one input file
+#POSTCONDITION: input file is unchanged, function returns number of cols in file
+#DESCRIPTION: reads first line from the given file and counts each item in the line
+#############
+num_cols(){
+    num_col=0
+    read myLine <$1
+    for i in $myLine
+    do
+        ((num_col++))
+    done
+    return $num_col
+}
+
+#############
+#FUNCTION: dims
+#PRECONDITION: one input file
+#POSTCONDITION: input file unchanged, function returns "#ROWS #COLS" format
+#DESCRIPTION: uses helper functions to output dimensions of input file
+#############
+dims(){
+    # check if file is empty
+    if [[ ! -s $1 ]]
+    then
+        echo "The input file is empty. Exiting..." >$2
+        exit 1
+    fi
+
+    # use helper functions to get dimensions
+    num_rows $1
+    numRows=$?
+    num_cols $1
+    numCols=$?
+    echo "$numRows $numCols"
+}
+
+#############
+#FUNCTION: transpose
+#PRECONDITION: one input file
+#POSTCONDITION: input file unchanged; transposed version of file printed
+#DESCRIPTION: cuts each column and prints as row
+#############
+transpose(){
+    # check if file is empty
+    if [[ ! -s $1 ]]
+    then
+        echo "The input file is empty. Exiting..." >$2
+        exit 1
+    fi
+
+    # count columns for counter comparison in loop
+    num_cols $1
+    numCols=$?
+
+    # for each column, cut it and show as output
+    for ((i=1;i<=numCols;i++))
+    do
+        cut -f $i $1 | paste -s
+    done
+}
+
+#############
+#FUNCTION: mean
+#PRECONDITION: one input file
+#POSTCONDITION: input file unchanged; prints one line of column "means" for given input
+#DESCRIPTION: This function is a slightly modified version of transpose that, instead of printing
+#each column as a row, it makes the column into a row, copies it to a file, and then adds each number
+#in that file. Then the average of that set is calculated according to the formula from the specs,
+#and added to another temp file to be printed as the final output.
+#############
+mean(){
+    # check if file is empty
+    if [[ ! -s $1 ]]
+    then
+        echo "The input file is empty. Exiting..." >$2
+        exit 1
+    fi
+
+    num_cols $1
+    numCols=$?
+
+    # for each column
+    for ((i=1; i<=numCols; i++))
+    do
+        # take each number in that column and put it as a row into TMP1
+        cut -f $i $1 > $TMP1
+
+        # start counters at 0
+        sum=0
+        cnt=0
+
+        # read each item in row and sum
+        while read j
+        do
+            sum=$((sum + j))
+            ((cnt++))
+        done < $TMP1
+
+        # calculate average with formula given in specs
+        avg=$(((sum+(cnt/2)*((sum>0)*2-1))/cnt))
+
+        echo -n -e "$avg\t" >> $TMP
+    done
+
+    # remove last char from file and add newline
+    sed -i '$ s/.$//' $TMP
+    echo >> $TMP
+
+    # print and cleanup
+    cat $TMP
+    rm $TMP $TMP1
+}
+
+#############
+#FUNCTION: add
+#PRECONDITION: two input files
+#POSTCONDITION: input files unchanged; prints sum of matrices in files
+#DESCRIPTION: validates that matrices have the same dimensions, then reads input lines
+#from both files, sums the corresponding values, and prints the line
+#
+#tried to optimize reading files, link below discusses while loop for reading from two files at once
+#https://unix.stackexchange.com/questions/26601/how-to-read-from-two-input-files-using-while-loop
+#summing lines:
+#https://www.unix.com/shell-programming-and-scripting/270027-sum-numbers-row.html
+#############
+add(){
+    # check if file is empty
+    if [[ ! -s $1 ]] || [[ ! -s $2 ]]
+    then
+        echo "The input file is empty. Exiting..." >$2
+        exit 1
+    fi
+
+    # check dims against each other
+    num_rows $1
+    numRows1=$?
+    num_cols $1
+    numCols1=$?
+    num_rows $2
+    numRows2=$?
+    num_cols $2
+    numCols2=$?
+
+    if [[ $numRows1 -ne $numRows2 ]] || [[ $numCols1 -ne numCols2 ]]
+    then
+        echo "These matrices are not the proper dimensions to add. Exiting..." >&2
+        exit 1
+    fi
+
+    # read lines from both input files, using comma as separator
+    while IFS=$',' read -r m1 m2
+    do
+        # copy lines into vars for parsing and create index counter
+        idx=0
+        f1=($m1)
+        f2=($m2)
+        for i in "${f1[@]}"
+        do
+            num=${f1[idx]}
+            num2=${f2[idx]}
+            sum=$((num + num2))
+            ((idx++))
+            
+            # printing /t vs printing newline at end of line
+            if [[ $idx -eq $numCols1 ]]
+            then
+                echo "$sum"
+            else
+                echo -n -e "$sum\t"
+            fi
+        done
+    done < <(paste -d ',' $1 $2)
+}
+
+#############
+#FUNCTION: multiply
+#PRECONDITION: two input files
+#POSTCONDITION: input files unchanged; prints product of two matrices, if valid
+#DESCRIPTION: takes an MxN and an NxP matrix and produces an MxP matrix.
+#specifically, it transposes a copy of matrix 2 to make for easier summing of
+#multiplied values reading only from rows instead of columns in matrix 2
+#############
+multiply(){
+    # check if file is empty
+    if [[ ! -s $1 ]] || [[ ! -s $2 ]]
+    then
+        echo "The input file is empty. Exiting..." >$2
+        exit 1
+    fi
+
+    # check dims against each other
+    num_cols $1
+    numCols=$?
+    num_rows $2
+    numRows=$?
+
+    if [[ $numCols -ne $numRows ]]
+    then
+        echo "These matrices are not the proper dimensions to multiply. Exiting..." >&2
+        exit 1
+    fi
+
+    #transpose file 2 into temp file
+    num_cols $2
+    numCols2=$?
+    for((i=1;i<=numCols2;i++))
+    do
+        paste -s <(cut -f$i $2) >> $TMP
+    done
+
+    # read a line from first matrix
+    while read line1
+    do
+        f1line=($line1)
+        # read a line from second matrix
+        while read line2
+        do
+            # start a sum counter for the arthmetic on this line
+            f2line=($line2)
+            sum=0
+
+            #iterate over each line in matrix 2 file
+            for ((i=0;i<numCols2;i++))
+            do
+                # multiply corresponding values from the matrices together
+                # with the transposition, the matrix 1 line values should be 
+                # multiplied by values from each row of matrix 2
+
+                # also check for null values
+                if [[ ! -z ${f1line[i]}  && ! -z ${f2line[i]} ]]
+                then
+                    num=$((${f1line[i]} * ${f2line[i]} + $sum))
+                    sum=$num
+                else
+                    sum=$sum
+                fi
+            done
+            # output sum and a tab to output file
+            echo -e -n "$sum\t" >> $TMP1
+        done <$TMP
+        # delete tab at end of line and add newline to output file
+        sed -i '$ s/.$//' $TMP1
+        echo >> $TMP1
+    done <$1
+
+    # cleanup
+    cat $TMP1
+    rm $TMP $TMP1
+}
+
+#start script
+main $@
