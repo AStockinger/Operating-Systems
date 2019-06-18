@@ -1,2 +1,2 @@
 # Operating-Systems
-projects in bash and C
+Projects in bash and C

@@ -1,5 +1,4 @@
 #!/bin/bash
-
 #######################
 #AUTHOR: Amy Stockinger
 #DATE: 04/01/19
@@ -13,7 +12,7 @@ TMP="someFileName$$"
 TMP1="someFileName2$$"
 USRINPUT="someFileName3$$"
 
-trap "rm -f $TMP $USRINPUT; echo 'CTRL-C received, exiting...'; exit 1" INT HUP TERM
+trap "rm -f $TMP $TMP1 $USRINPUT; echo 'CTRL-C received, exiting...'; exit 1" INT HUP TERM
 
 #############
 #FUNCTION: main
@@ -214,7 +213,7 @@ mean(){
     done
 
     # remove last char from file and add newline
-    sed -i '$ s/.$//' $TMP
+    truncate -s-1 $TMP
     echo >> $TMP
 
     # print and cleanup
@@ -228,11 +227,6 @@ mean(){
 #POSTCONDITION: input files unchanged; prints sum of matrices in files
 #DESCRIPTION: validates that matrices have the same dimensions, then reads input lines
 #from both files, sums the corresponding values, and prints the line
-#
-#tried to optimize reading files, link below discusses while loop for reading from two files at once
-#https://unix.stackexchange.com/questions/26601/how-to-read-from-two-input-files-using-while-loop
-#summing lines:
-#https://www.unix.com/shell-programming-and-scripting/270027-sum-numbers-row.html
 #############
 add(){
     # check if file is empty
@@ -350,7 +344,7 @@ multiply(){
             echo -e -n "$sum\t" >> $TMP1
         done <$TMP
         # delete tab at end of line and add newline to output file
-        sed -i '$ s/.$//' $TMP1
+        truncate -s-1 $TMP1
         echo >> $TMP1
     done <$1
 
